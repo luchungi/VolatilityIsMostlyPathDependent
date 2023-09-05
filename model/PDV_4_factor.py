@@ -125,45 +125,9 @@ def residual(x, df, n):
     y_hat = predict(β0, β1, β2, λ11, λ12, θ1, λ21, λ22, θ2, df, n)
     return y - y_hat.numpy()
 
-def create_dataset_from_yf_df(spx_df, vix_df, start_date, end_date, predict_t_plus_1=False):
-    '''
-    Create dataset format used for model defined above from yfinance dataframe
-    params:
-    spx_df: pandas.DataFrame
-        dataframe containing the S&P500 data from yfinance with datetime index
-    vix_df: pandas.DataFrame
-        dataframe containing the VIX data from yfinance with datetime index
-    start_date: datetime
-        start date of the dataset (included)
-    end_date: datetime
-        end date of the dataset (excluded)
-    predict_t_plus_1: bool
-        if True, the model will predict the VIX level at t+1, if False, the model will predict the VIX level at t
-    '''
-    # check that both dataframe have a datetime index
-    if not isinstance(spx_df.index, pd.DatetimeIndex):
-        raise ValueError('spx_df must have a datetime index')
-    if not isinstance(vix_df.index, pd.DatetimeIndex):
-        raise ValueError('vix_df must have a datetime index')
-
-    # calculate simple return and squared return of S&P500
-    spx = pd.DataFrame(columns=['r1', 'r2'])
-    spx['r1'] = spx_df.loc[start_date:end_date-pd.Timedelta(days=1), 'Close'].pct_change()
-    spx['r2'] = spx['r1'] ** 2
-
-    # extract VIX level
-    vix = vix_df.loc[start_date:end_date-pd.Timedelta(days=1), ['Close']] / 100
-    vix.columns = ['vix']
-
-    # check that both dataframes have same index
-    if not spx.index.equals(vix.index):
-        raise ValueError('spx_df and vix_df must have same index from start_date to end_date')
-
-    # shift VIX level if predict_t_plus_1 is True i.e. predict VIX level at t+1
-    if predict_t_plus_1:
-        vix = vix.shift(-1)
-
-    combined = pd.concat([spx, vix], axis=1)
-    combined = combined.dropna()
-
-    return combined
+def torch_predict(params, x):
+    β0, β1, β2, λ11, λ12, θ1, λ21, λ22, θ2 = params
+    r1_sliding_window = x[:, 0, :]
+    r2_sliding_window = x[:, 1, :]
+    t = x[:, 2, :]
+    return β0 + β1 * R1(λ11, λ12, θ1, r1_sliding_window, t) + β2 * R2(λ21, λ22, θ2, r2_sliding_window, t)
