@@ -34,7 +34,7 @@ class Trainer:
                  path='./weights',
                  **kwargs):
 
-        self.model = model
+        self.model = model.to(device)
         self.optimizer = optimizer
         self.loss_fn = loss_fn
         self.scheduler = scheduler
