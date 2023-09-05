@@ -245,7 +245,7 @@ class MSETrainer(Trainer):
         Function to define a validation step
         '''
         with torch.no_grad():
-            loss = self.loss_fn(y, self.model(x))
+            loss = self.loss_fn(y, self.model(x).squeeze())
         self.log_loss('valid_loss', loss.item())
 
     def test_batch(self, x, y):
@@ -253,5 +253,5 @@ class MSETrainer(Trainer):
         Function to define a test step
         '''
         with torch.no_grad():
-            loss = self.loss_fn(y, self.model(x))
+            loss = self.loss_fn(y, self.model(x).squeeze())
         self.log_loss('test_loss', loss.item())
