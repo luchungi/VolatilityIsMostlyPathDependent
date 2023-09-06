@@ -3,7 +3,7 @@ import pandas as pd
 import torch
 from torch.utils.data import Dataset, DataLoader
 
-def create_df_from_yf(spx_df, vix_df, start_date, end_date, predict_t_plus_1=False):
+def create_df_from_yf(spx_df, vix_df, start_date, end_date, predict_t_plus_1=False, log_return=False):
     '''
     Create dataset format used for model defined above from yfinance dataframe
     params:
@@ -24,9 +24,12 @@ def create_df_from_yf(spx_df, vix_df, start_date, end_date, predict_t_plus_1=Fal
     if not isinstance(vix_df.index, pd.DatetimeIndex):
         raise ValueError('vix_df must have a datetime index')
 
-    # calculate simple return and squared return of S&P500
+    # calculate simple or log return and squared return of S&P500
     spx = pd.DataFrame(columns=['r1', 'r2'])
-    spx['r1'] = spx_df.loc[start_date:end_date-pd.Timedelta(days=1), 'Close'].pct_change()
+    if log_return:
+        spx['r1'] = np.log(spx_df.loc[start_date:end_date-pd.Timedelta(days=1), 'Close']).diff()
+    else:
+        spx['r1'] = spx_df.loc[start_date:end_date-pd.Timedelta(days=1), 'Close'].pct_change()
     spx['r2'] = spx['r1'] ** 2
 
     # extract VIX level
