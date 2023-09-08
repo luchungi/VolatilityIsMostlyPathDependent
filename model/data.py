@@ -3,7 +3,7 @@ import pandas as pd
 import torch
 from torch.utils.data import Dataset, DataLoader
 
-def create_df_from_yf(spx_df, vix_df, start_date, end_date, predict_t_plus_1=False, log_return=False):
+def create_df_from_yf(spx_df, start_date, end_date, vix_df=None, predict_t_plus_1=False, log_return=False):
     '''
     Create dataset format used for model defined above from yfinance dataframe
     params:
@@ -21,8 +21,6 @@ def create_df_from_yf(spx_df, vix_df, start_date, end_date, predict_t_plus_1=Fal
     # check that both dataframe have a datetime index
     if not isinstance(spx_df.index, pd.DatetimeIndex):
         raise ValueError('spx_df must have a datetime index')
-    if not isinstance(vix_df.index, pd.DatetimeIndex):
-        raise ValueError('vix_df must have a datetime index')
 
     # calculate simple or log return and squared return of S&P500
     spx = pd.DataFrame(columns=['r1', 'r2'])
@@ -32,20 +30,26 @@ def create_df_from_yf(spx_df, vix_df, start_date, end_date, predict_t_plus_1=Fal
         spx['r1'] = spx_df.loc[start_date:end_date-pd.Timedelta(days=1), 'Close'].pct_change()
     spx['r2'] = spx['r1'] ** 2
 
-    # extract VIX level
-    vix = vix_df.loc[start_date:end_date-pd.Timedelta(days=1), ['Close']] / 100
-    vix.columns = ['vix']
+    if vix_df is None:
+        combined = spx
+    else:
+        if not isinstance(vix_df.index, pd.DatetimeIndex):
+            raise ValueError('vix_df must have a datetime index')
 
-    # check that both dataframes have same index
-    if not spx.index.equals(vix.index):
-        raise ValueError('spx_df and vix_df must have same index from start_date to end_date')
+        # extract VIX level
+        vix = vix_df.loc[start_date:end_date-pd.Timedelta(days=1), ['Close']] / 100
+        vix.columns = ['vix']
 
-    # shift VIX level if predict_t_plus_1 is True i.e. predict VIX level at t+1
-    if predict_t_plus_1:
-        vix = vix.shift(-1)
+        # check that both dataframes have same index
+        if not spx.index.equals(vix.index):
+            raise ValueError('spx_df and vix_df must have same index from start_date to end_date')
 
-    combined = pd.concat([spx, vix], axis=1)
-    combined = combined.dropna()
+        # shift VIX level if predict_t_plus_1 is True i.e. predict VIX level at t+1
+        if predict_t_plus_1:
+            vix = vix.shift(-1)
+
+        combined = pd.concat([spx, vix], axis=1)
+        combined = combined.dropna()
 
     return combined
 

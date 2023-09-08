@@ -94,7 +94,7 @@ def predict(β0, β1, β2, λ11, λ12, θ1, λ21, λ22, θ2, df, n):
     n: int
         sliding window size to calculate R1 and R2
     '''
-    array = df[['r1', 'r2', 'vix']].values
+    array = df[['r1', 'r2']].values
 
     # create sliding window of size n for r1 and r2 with shape (len(df) - n + 1, n)
     r1_sliding_window = torch.tensor(np.lib.stride_tricks.sliding_window_view(array[:, 0], n), dtype=torch.float64, requires_grad=False)
