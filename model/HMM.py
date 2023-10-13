@@ -1,10 +1,12 @@
 import os
 import ast
+
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 from scipy.stats import norm, dirichlet
 from scipy.special import logsumexp
+from hmmlearn import hmm
 
 def logdotexp(A, B):
     max_A = np.max(A)
@@ -45,7 +47,7 @@ def plot_regimes(preds, date_index):
         plt.axvspan(date_index[change_idx[i]], date_index[change_idx[i+1]], alpha=0.2, color=colors[preds[change_idx[i]]])
     plt.axvspan(date_index[change_idx[-1]], date_index[-1], alpha=0.2, color=colors[preds[change_idx[-1]]])
 
-class SPXHMM():
+class IrregularPeriodsHMM():
     '''
     Class to define a HMM for the S&P500 index
     Assumes S&P500 follows a regime switching geometric Brownian motion
@@ -286,3 +288,111 @@ class SPXHMM():
         sim_df = pd.DataFrame({'Close': px}, index=self.df.index)
         if return_df:
             return sim_df
+
+class RegularPeriodsHMM():
+
+    def __init__(self,
+                 n_states,
+                 n_models,
+                 covariance_type='full',
+                 min_covar=0.001,
+                 means_prior=0.,
+                 covars_prior=0.01,
+                 startprob_prior=1.0,
+                 transmat_prior=1.0,
+                 tol=1e-6,
+                 n_iter=100,
+                 verbose=True):
+        self.n_states = n_states
+        self.n_models = n_models
+        self.verbose = verbose
+        self.models = []
+        for _ in range(n_models):
+            model = hmm.GaussianHMM(n_components=n_states,
+                                    covariance_type=covariance_type,
+                                    min_covar=min_covar,
+                                    means_prior=means_prior,
+                                    covars_prior=covars_prior,
+                                    startprob_prior=startprob_prior,
+                                    transmat_prior=transmat_prior,
+                                    n_iter=n_iter,
+                                    tol=tol)
+            # model.init_params = ''
+            self.models.append(model)
+
+    def fit(self, data, col:list=['Close']):
+
+        # get log returns from time series data which can have multiple columns
+        x = (np.log(data[col] / data[col].shift(1)).dropna()).values
+
+        # fit each model and choose the best model
+        high_score = -np.inf
+        for i in range(self.n_models):
+            self.models[i].fit(x)
+            preds = self.models[i].predict(x)
+            print(f'Model score: {self.models[i].score(x):0.4f}')
+            model_score = self.models[i].score(x)
+            if model_score > high_score:
+                self.best_model = i
+                high_score = model_score
+                best_preds = preds
+        print(f'Best model: {self.best_model}')
+
+        # print number of observations in each regime
+        for i in range(self.n_states):
+            print(f'Regime {i} count: {(best_preds == i).sum()}')
+
+        # plot the underlying path and regimes
+        data[col].plot(figsize=(16, 9))
+        plot_regimes(best_preds, data.index)
+
+        # get parameters of best model
+        self.drift = self.models[self.best_model].means_.squeeze()
+        self.covar = (self.models[self.best_model].covars_.squeeze())
+        self.transition = self.models[self.best_model].transmat_
+
+        if x.shape[-1] == 1:
+            self.sigma = np.sqrt(self.covar*252)
+        else:
+            self.sigma = []
+            for i in range(self.n_states):
+                self.sigma.append(np.sqrt(self.covar[i].diagonal()*252))
+            self.sigma = np.array(self.sigma)
+        self.mu = (self.drift*252) + self.sigma**2/2
+        self.pi = self.models[self.best_model].startprob_
+        print(f'μ: {self.mu}')
+        print(f'σ: {self.sigma}')
+        print(f'Drift: {self.mu-self.sigma**2/2}')
+        print('Transition:')
+        print(self.transition)
+        print(f'Initial state distribution: {self.pi}')
+
+    def simulate(self, start_value, indices, steps_per_unit_time=252, seed=None):
+
+        # training could have been done on multiple time series but simulation is only done on first time series
+        if self.drift.ndim == 2:
+            drift = self.drift[:,0]
+            sigma = self.sigma[:,0]
+        else:
+            drift = self.drift
+            sigma = self.sigma
+
+        # simulate geometric brownian motion
+        rng = np.random.default_rng() if seed is None else np.random.default_rng(seed)
+        spx = [start_value]
+        state = rng.choice(np.arange(self.n_states), p=self.models[self.best_model].startprob_)
+        states = [state]
+        for _ in range(len(indices)-1):
+            spx.append(spx[-1] * np.exp((drift[state])/steps_per_unit_time + sigma[state]*rng.normal()/np.sqrt(steps_per_unit_time)))
+            state = rng.choice(np.arange(self.n_states), p=self.transition[state])
+            states.append(state)
+
+        # create dataframe of simulated path
+        sim_df = pd.DataFrame({'Close': spx}, index=indices)
+
+        # plot simulated path
+        states = np.array(states)
+        sim_df.plot(figsize=(16, 9))
+        plot_regimes(states, indices)
+
+        return sim_df
