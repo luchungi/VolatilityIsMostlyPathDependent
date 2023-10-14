@@ -379,16 +379,16 @@ class RegularPeriodsHMM():
 
         # simulate geometric brownian motion
         rng = np.random.default_rng() if seed is None else np.random.default_rng(seed)
-        spx = [start_value]
-        state = rng.choice(np.arange(self.n_states), p=self.models[self.best_model].startprob_)
+        px = [start_value]
+        state = rng.choice(np.arange(self.n_states), p=self.pi)
         states = [state]
         for _ in range(len(indices)-1):
-            spx.append(spx[-1] * np.exp((drift[state])/steps_per_unit_time + sigma[state]*rng.normal()/np.sqrt(steps_per_unit_time)))
+            px.append(px[-1] * np.exp((drift[state])/steps_per_unit_time + sigma[state]*rng.normal()/np.sqrt(steps_per_unit_time)))
             state = rng.choice(np.arange(self.n_states), p=self.transition[state])
             states.append(state)
 
         # create dataframe of simulated path
-        sim_df = pd.DataFrame({'Close': spx}, index=indices)
+        sim_df = pd.DataFrame({'Close': px}, index=indices)
 
         # plot simulated path
         states = np.array(states)
@@ -396,3 +396,25 @@ class RegularPeriodsHMM():
         plot_regimes(states, indices)
 
         return sim_df
+
+    def batch_simulate(self, n_samples, start_value, indices, steps_per_unit_time=252, seed=None):
+
+        # training could have been done on multiple time series but simulation is only done on first time series
+        if self.drift.ndim == 2:
+            drift = self.drift[:,0]
+            sigma = self.sigma[:,0]
+        else:
+            drift = self.drift
+            sigma = self.sigma
+
+        # simulate geometric brownian motion
+        rng = np.random.default_rng() if seed is None else np.random.default_rng(seed)
+        px = np.ones((n_samples, len(indices))) * start_value
+        state = rng.multinomial(n=1, pvals=self.pi, size=n_samples).argmax(axis=1)
+        # states = [state]
+        for i in range(len(indices)-1):
+            px[:,i+1] = px[:,-1] * np.exp((drift[state])/steps_per_unit_time + sigma[state]*rng.normal(n_samples)/np.sqrt(steps_per_unit_time))
+            state = rng.multinomial(n=1, pvals=self.transition[state], size=n_samples).argmax(axis=1)
+            # state.append(state)
+
+        return px

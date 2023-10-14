@@ -48,7 +48,7 @@ def R1(λ1, λ2, θ, return_tensor, t):
             time difference between prediction datetime and each row in the sliding window and is a tensor of shape (len(df) - n, n)
         '''
 
-        return torch.sum(return_tensor * convex_combi_exp_kernel(t, λ1, λ2, θ), dim=1)
+        return torch.sum(return_tensor * convex_combi_exp_kernel(t, λ1, λ2, θ), dim=-1)
 
 def R2(λ1, λ2, θ, return_tensor, t):
     '''
@@ -65,7 +65,7 @@ def R2(λ1, λ2, θ, return_tensor, t):
     t: torch.tensor
         time difference between prediction datetime and each row in the sliding window and is a tensor of shape (len(df) - n, n)
     '''
-    return torch.sqrt(torch.sum(return_tensor * convex_combi_exp_kernel(t, λ1, λ2, θ), dim=1))
+    return torch.sqrt(torch.sum(return_tensor * convex_combi_exp_kernel(t, λ1, λ2, θ), dim=-1))
 
 def predict(β0, β1, β2, λ11, λ12, θ1, λ21, λ22, θ2, df, n):
     '''
@@ -110,6 +110,25 @@ def predict(β0, β1, β2, λ11, λ12, θ1, λ21, λ22, θ2, df, n):
     t = torch.tensor(dt_sliding_window, dtype=torch.float64, requires_grad=False)
 
     return β0 + β1 * R1(λ11, λ12, θ1, r1_sliding_window, t) + β2 * R2(λ21, λ22, θ2, r2_sliding_window, t)
+
+def batch_predict(β0, β1, β2, λ11, λ12, θ1, λ21, λ22, θ2, features, datetimeindex, n, return_numpy=False):
+    # create sliding window of size n for r1 and r2 with shape (len(df) - n + 1, n)
+    r1_sliding_window = torch.tensor(np.lib.stride_tricks.sliding_window_view(features[:, :, 0], n, axis=-1), dtype=torch.float64, requires_grad=False)
+    r2_sliding_window = torch.tensor(np.lib.stride_tricks.sliding_window_view(features[:, :, 1], n, axis=-1), dtype=torch.float64, requires_grad=False)
+
+    # calculate time difference between prediction datetime and each row in the sliding window with shape (len(df) - n + 1, n)
+    dt = ((datetimeindex[1:] - datetimeindex[:-1]).days / 365).values
+    dt_sliding_window = np.lib.stride_tricks.sliding_window_view(dt, n-1)
+    dt_sliding_window = np.flip(dt_sliding_window, axis=1)
+    dt_sliding_window = np.cumsum(dt_sliding_window, axis=1)
+    dt_sliding_window = np.flip(dt_sliding_window, axis=1)
+    dt_sliding_window = np.concatenate((dt_sliding_window, np.zeros((dt_sliding_window.shape[0], 1))), axis=1)
+    t = torch.tensor(dt_sliding_window, dtype=torch.float64, requires_grad=False).unsqueeze(0)
+
+    preds = β0 + β1 * R1(λ11, λ12, θ1, r1_sliding_window, t) + β2 * R2(λ21, λ22, θ2, r2_sliding_window, t)
+
+    return preds.numpy() if return_numpy else preds
+
 
 def residual(x, df, n):
     '''
@@ -234,3 +253,6 @@ class PDV2Exp():
         See plot function above
         '''
         plot(self.params, df, n, valid_start_date, test_start_date)
+
+    def batch_predict(self, features, datetimeindex, n, return_numpy=False):
+        return batch_predict(*self.params, features, datetimeindex, n, return_numpy)

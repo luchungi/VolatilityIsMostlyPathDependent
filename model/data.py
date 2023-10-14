@@ -53,6 +53,33 @@ def create_df_from_yf(spx_df, start_date, end_date, vix_df=None, predict_t_plus_
 
     return combined
 
+def batch_create_df_from_yf(data, log_return=False):
+    '''
+    Create dataset format used for model defined above from yfinance dataframe
+    params:
+    data: numpy.ndarray
+        array of shape (n_samples, n_periods) where each row is a time series of simulated S&P500 price
+    vix_df: pandas.DataFrame
+        dataframe containing the VIX data from yfinance with datetime index
+    start_date: datetime
+        start date of the dataset (included)
+    end_date: datetime
+        end date of the dataset (excluded)
+    predict_t_plus_1: bool
+        if True, the model will predict the VIX level at t+1, if False, the model will predict the VIX level at t
+    '''
+
+    # calculate simple or log return and squared return of S&P500
+    features = np.empty((data.shape[0], data.shape[1]-1, 2))
+
+    if log_return:
+        features[:, :, 0] = np.log(data[:, 1:]) - np.log(data[:, :-1])
+    else:
+        features[:, :, 0] = (data[:, 1:] - data[:, :-1]) / data[:, :-1]
+    features[:, :, 1] = features[:, :, 0] ** 2
+
+    return features
+
 class VIXDataset(Dataset):
     '''
     Dataset class for VIX data
