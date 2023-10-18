@@ -367,15 +367,15 @@ class RegularPeriodsHMM():
         print(self.transition)
         print(f'Initial state distribution: {self.pi}')
 
-    def simulate(self, start_value, indices, steps_per_unit_time=252, seed=None):
+    def simulate(self, start_value, indices, seed=None):
 
         # training could have been done on multiple time series but simulation is only done on first time series
         if self.drift.ndim == 2:
             drift = self.drift[:,0]
-            sigma = self.sigma[:,0]
+            sigma = self.covar[:,0]**0.5
         else:
             drift = self.drift
-            sigma = self.sigma
+            sigma = self.covar**0.5
 
         # simulate geometric brownian motion
         rng = np.random.default_rng() if seed is None else np.random.default_rng(seed)
@@ -383,7 +383,7 @@ class RegularPeriodsHMM():
         state = rng.choice(np.arange(self.n_states), p=self.pi)
         states = [state]
         for _ in range(len(indices)-1):
-            px.append(px[-1] * np.exp((drift[state])/steps_per_unit_time + sigma[state]*rng.normal()/np.sqrt(steps_per_unit_time)))
+            px.append(px[-1] * np.exp((drift[state]) + sigma[state]*rng.normal()))
             state = rng.choice(np.arange(self.n_states), p=self.transition[state])
             states.append(state)
 
@@ -397,15 +397,15 @@ class RegularPeriodsHMM():
 
         return sim_df
 
-    def batch_simulate(self, n_samples, start_value, indices, steps_per_unit_time=252, seed=None):
+    def batch_simulate(self, n_samples, start_value, indices, seed=None):
 
         # training could have been done on multiple time series but simulation is only done on first time series
         if self.drift.ndim == 2:
             drift = self.drift[:,0]
-            sigma = self.sigma[:,0]
+            sigma = self.covar[:,0]**0.5
         else:
             drift = self.drift
-            sigma = self.sigma
+            sigma = self.covar**0.5
 
         # simulate geometric brownian motion
         rng = np.random.default_rng() if seed is None else np.random.default_rng(seed)
@@ -413,7 +413,7 @@ class RegularPeriodsHMM():
         state = rng.multinomial(n=1, pvals=self.pi, size=n_samples).argmax(axis=1)
         # states = [state]
         for i in range(len(indices)-1):
-            px[:,i+1] = px[:,-1] * np.exp((drift[state])/steps_per_unit_time + sigma[state]*rng.normal(n_samples)/np.sqrt(steps_per_unit_time))
+            px[:,i+1] = px[:,i] * np.exp((drift[state]) + sigma[state]*rng.normal(size=n_samples))
             state = rng.multinomial(n=1, pvals=self.transition[state], size=n_samples).argmax(axis=1)
             # state.append(state)
 
