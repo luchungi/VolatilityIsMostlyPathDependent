@@ -129,8 +129,7 @@ def batch_predict(β0, β1, β2, λ11, λ12, θ1, λ21, λ22, θ2, features, dat
 
     return preds.numpy() if return_numpy else preds
 
-
-def residual(x, df, n):
+def residual(x, df, n, return_y_hat=False):
     '''
     Calculate the residuals of the PDV model torch version
     params:
@@ -144,7 +143,10 @@ def residual(x, df, n):
     β0, β1, β2, λ11, λ12, θ1, λ21, λ22, θ2 = x
     y = df.iloc[n-1:]['vix'].values # shape (len(df) - n + 1,) = number of predictions
     y_hat = predict(β0, β1, β2, λ11, λ12, θ1, λ21, λ22, θ2, df, n)
-    return y - y_hat.numpy()
+    if return_y_hat:
+        return y - y_hat.numpy(), y_hat.numpy()
+    else:
+        return y - y_hat.numpy()
 
 def torch_predict(params, x):
     β0, β1, β2, λ11, λ12, θ1, λ21, λ22, θ2 = params

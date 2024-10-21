@@ -17,6 +17,8 @@ def create_df_from_yf(spx_df, start_date, end_date, vix_df=None, predict_t_plus_
         end date of the dataset (excluded)
     predict_t_plus_1: bool
         if True, the model will predict the VIX level at t+1, if False, the model will predict the VIX level at t
+    log_return: bool
+        if True, the model will use log return, if False, the model will use simple return
     '''
     # check that both dataframe have a datetime index
     if not isinstance(spx_df.index, pd.DatetimeIndex):
